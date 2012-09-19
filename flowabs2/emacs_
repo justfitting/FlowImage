@@ -1,0 +1,208 @@
+;; Add List to path
+(add-to-list 'load-path "/home/qiqidone/emacs/lisp")
+(add-to-list 'load-path "/home/qiqidone/emacs/lisp/auctex-11.86")
+;; (add-to-list 'load-path "/home/qiqidone/emacs/lisp/cedet-1.0")
+;; (add-to-list 'load-path "/home/qiqidone/emacs/lisp/ecb-2.40")
+(add-to-list 'load-path "/home/qiqidone/emacs/lisp/cjk")
+(add-to-list 'load-path "/home/qiqidone/emacs/lisp/auto-complete-1.3.1")
+(add-to-list 'load-path "/home/qiqidone/emacs/lisp/yasnippet-0.6.1c")
+(add-to-list 'load-path "/home/qiqidone/emacs/lisp/emacs-w3m-1.4.4")
+(add-to-list 'load-path "/home/qiqidone/emacs/lisp/python-mode.el-6.0.1")
+(add-to-list 'load-path "/home/qiqidone/emacs/lisp/selfa")
+
+
+;; Global Basic Setting
+(load-file "~/emacs/lisp/emacs-rc-global.el")
+
+;; Global Plugin Tool 
+(load-file "~/emacs/lisp/emacs-rc-plugin.el")
+
+;; C, C++,GDB, CUDA, etc...
+(load-file "~/emacs/lisp/emacs-rc-c&c++.el")
+
+;;================= Yasnippet ===================
+
+(require 'yasnippet) ;; not yasnippet-bundle
+(yas/initialize)
+(yas/load-directory "/home/qiqidone/emacs/lisp/yasnippet-0.6.1c")
+
+
+
+;;================== Auto-Complete=================
+(require 'auto-complete)
+(require 'auto-complete-config)
+(add-to-list 'ac-dictionary-directories "~/emacs/lisp/auto-complete-1.3.1/dist")
+(ac-config-default)
+(global-auto-complete-mode t)
+(setq ac-use-menu-map t)
+;; color
+(set-face-background 'ac-candidate-face "lightgray")
+(set-face-underline 'ac-candidate-face "darkgray")
+(set-face-background 'ac-selection-face "steelblue") 
+;; Default settings
+(define-key ac-menu-map "\M-n" 'ac-next)
+(define-key ac-menu-map "\M-p" 'ac-previous)
+
+
+
+;;;;/================================================/
+;;       	php mode ： 
+;;/================================================/
+
+(autoload 'php-mode "php-mode" "Major mode for editing php code." t)
+(add-to-list 'auto-mode-alist '("\\.php$" . php-mode))
+(add-to-list 'auto-mode-alist '("\\.inc$" . php-mode))
+(add-hook 'php-mode-user-hook 'turn-on-font-lock)
+
+;;;;/================================================/
+;;       	python mode ： 
+;;/================================================/
+
+;; (load-file "~/emacs/lisp/emacs-rc-python.el")
+
+
+
+
+;;;;/================================================/
+;;       	Android-mode
+;;/================================================/
+
+;; (load-file "~/emacs/lisp/emacs-rc-android.el")
+
+
+
+;;;;/================================================/
+;;       	Latex @ emacs ： latex 排版利器
+;;/================================================/
+
+(load "auctex.el" nil t t)
+(load "auctex.el" nil t t)
+;(load "preview-latex.el" nil t t)
+(setq TeX-auto-save t)
+(setq TeX-parse-self t)
+(setq-default TeX-master nil)
+
+;; 在工具栏显示编辑按钮
+(add-hook 'LaTeX-mode-hook #'LaTeX-install-toolbar) 
+;; allow for export=>beamer by placing
+
+;; hook
+(add-hook 'LaTeX-mode-hook
+          (lambda ()
+            (setq TeX-auto-untabify t     ; remove all tabs before saving
+                  TeX-engine 'xetex       ; use xelatex default
+                  TeX-show-compilation t) ; display compilation windows
+            (TeX-global-PDF-mode t)       ; PDF mode enable, not plain
+            (setq TeX-save-query nil)
+            (imenu-add-menubar-index)
+            (define-key LaTeX-mode-map (kbd "TAB") 'TeX-complete-symbol)))
+;; #+LaTeX_CLASS: beamer in org files
+(unless (boundp 'org-export-latex-classes)
+  (setq org-export-latex-classes nil))
+(add-to-list 'org-export-latex-classes
+  ;; beamer class, for presentations
+  '("beamer"
+     "\\documentclass[11pt]{beamer}\n
+      \\mode<{{{beamermode}}}>\n
+      \\usetheme{{{{beamertheme}}}}\n
+      \\usecolortheme{{{{beamercolortheme}}}}\n
+      \\beamertemplateballitem\n
+      \\setbeameroption{show notes}
+      \\usepackage[utf8]{inputenc}\n
+      \\usepackage[T1]{fontenc}\n
+      \\usepackage{hyperref}\n
+      \\usepackage{color}
+      \\usepackage{listings}
+      \\lstset{numbers=none,language=[ISO]C++,tabsize=4,
+  frame=single,
+  basicstyle=\\small,
+  showspaces=false,showstringspaces=false,
+  showtabs=false,
+  keywordstyle=\\color{blue}\\bfseries,
+  commentstyle=\\color{red},
+  }\n
+      \\usepackage{verbatim}\n
+      \\institute{{{{beamerinstitute}}}}\n          
+       \\subject{{{{beamersubject}}}}\n"
+
+     ("\\section{%s}" . "\\section*{%s}")
+     
+     ("\\begin{frame}[fragile]\\frametitle{%s}"
+       "\\end{frame}"
+       "\\begin{frame}[fragile]\\frametitle{%s}"
+       "\\end{frame}")))
+
+  ;; letter class, for formal letters
+
+  (add-to-list 'org-export-latex-classes
+
+  '("letter"
+     "\\documentclass[11pt]{letter}\n
+      \\usepackage[utf8]{inputenc}\n
+      \\usepackage[T1]{fontenc}\n
+      \\usepackage{color}"
+     
+     ("\\section{%s}" . "\\section*{%s}")
+     ("\\subsection{%s}" . "\\subsection*{%s}")
+     ("\\subsubsection{%s}" . "\\subsubsection*{%s}")
+     ("\\paragraph{%s}" . "\\paragraph*{%s}")
+     ("\\subparagraph{%s}" . "\\subparagraph*{%s}")))
+(add-to-list 'org-export-latex-classes
+             '("article"
+               "\\documentclass{article}"
+               ("\\section{%s}" . "\\section*{%s}")
+               ("\\subsection{%s}" . "\\subsection*{%s}")
+               ("\\subsubsection{%s}" . "\\subsubsection*{%s}")
+               ("\\paragraph{%s}" . "\\paragraph*{%s}")
+               ("\\subparagraph{%s}" . "\\subparagraph*{%s}")))
+;;/================================================/
+;;                  ORG-Mode 记笔记
+;;/================================================/
+
+;;help : http://orgmode.org/org.html
+
+(add-to-list 'load-path "~/org/")
+(require 'org)
+(add-to-list 'auto-mode-alist '("\\.org$" . org-mode))
+(define-key global-map "\C-cl" 'org-store-link)
+(define-key global-map "\C-ca" 'org-agenda)
+;; 设置agenda文件
+(setq org-agenda-files (list "~/emacs/org/Todo.org"
+							 "~/emacs/org/Research.org"))
+(define-key org-mode-map "\M-e" 'yas/expand) ;下次改个快捷键
+(setq org-log-done t)
+ 
+;; 常用操作 C = ctrl; M = Meta; S = Shift
+;; C-c C-e 导出文件
+;; C-c C-t 变化事件状态 todo done == Shift-方向键 上下为优先级
+;; C-c l 存下当前文件链接 C-c C-l 插入某个链接
+;; C-c a t 显示所有TODO项目
+;; C-c C-q 为当前标题插入标签
+;; C-c C-c 当光标在某标题栏时，为该标题插入标签（此时和C-c C-q功能一样）
+;; S-TAB 显示最高层结构 再一次则下一层
+;; M-S-Enter 增加下一个TODO  org-insert-todo-heading
+;; M-Enter 增加下一个同级项目
+;; 时间
+;; C-c C-d 插入一个Deadline
+;; C-c C-s 插入一个Schedule    
+
+;;/================================================/
+;;                  emms 听 mp3
+;;/================================================/
+
+;; (require 'emms) 						
+;; (setq emms-info-mp3info-program-name "~/emacs/music") 
+;; (global-set-key [C-f5] 'emms-pbi-popup-playlist)
+
+
+;;;;/================================================/
+;;       	selfa-mode ： 自问自答
+;;          搜索自己的笔记数据库，然后显示提示
+;;/================================================/
+
+(load "selfa-mode.el")
+(selfa-mode)
+(global-set-key "\M-\C-q" 'selfa-search-files)
+
+
+(define-key global-map "\M-/" 'hippie-expand)

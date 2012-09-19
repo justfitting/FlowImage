@@ -1,0 +1,528 @@
+
+#include "flowabs.h"
+#include <stdlib.h>
+#include <math.h>
+#include <stdio.h>
+
+
+//Bilinear interpolation
+#define INTERPOLATE_IMAGE 0
+#define INTERPOLATE_NORM  1
+
+inline vec3 bilinear_interpolate( vec3* img, vec2 p, int width, int height, int flag = INTERPOLATE_IMAGE )
+{
+	vec2 q = { clamp( p.x, 0.0, width - 1.1 ), clamp( p.y, 0.0, height - 1.1 ) };//prevent being out of map
+
+	int qx = int ( q.x );
+	int qy = int ( q.y );
+
+	double tx = qx + 1 -q.x;
+	double ty = qy + 1 -q.y;
+
+	vec3 result;
+	switch (flag)
+	{
+	case INTERPOLATE_IMAGE:
+		result.r = ( img[ qy * width + qx ].r * tx + img[ qy * width + qx + 1 ].r * ( 1 - tx ) ) * ty +
+			( img[ ( qy + 1 ) * width + qx ].r * tx + img[ ( qy + 1 ) * width + qx + 1 ].r * ( 1 - tx ) ) * ( 1 - ty ); 
+		result.g = ( img[ qy * width + qx ].g * tx + img[ qy * width + qx + 1 ].g * ( 1 - tx ) ) * ty +
+			( img[ ( qy + 1 ) * width + qx ].g * tx + img[ ( qy + 1 ) * width + qx + 1 ].g * ( 1 - tx ) ) * ( 1 - ty ); 
+		result.b = ( img[ qy * width + qx ].b * tx + img[ qy * width + qx + 1 ].b * ( 1 - tx ) ) * ty +
+			( img[ ( qy + 1 ) * width + qx ].b * tx + img[ ( qy + 1 ) * width + qx + 1 ].b * ( 1 - tx ) ) * ( 1 - ty );
+		break;
+	case INTERPOLATE_NORM:
+		result.r = ( img[ qy * width + qx ].r * tx + img[ qy * width + qx + 1 ].r * ( 1 - tx ) ) * ty +
+			( img[ ( qy + 1 ) * width + qx ].r * tx + img[ ( qy + 1 ) * width + qx + 1 ].r * ( 1 - tx ) ) * ( 1 - ty ); 
+		result.g = ( img[ qy * width + qx ].g * tx + img[ qy * width + qx + 1 ].g * ( 1 - tx ) ) * ty +
+			( img[ ( qy + 1 ) * width + qx ].g * tx + img[ ( qy + 1 ) * width + qx + 1 ].g * ( 1 - tx ) ) * ( 1 - ty ); 
+		result.b = ( img[ qy * width + qx ].b * tx + img[ qy * width + qx + 1 ].b * ( 1 - tx ) ) * ty +
+			( img[ ( qy + 1 ) * width + qx ].b * tx + img[ ( qy + 1 ) * width + qx + 1 ].b * ( 1 - tx ) ) * ( 1 - ty );
+	
+	}
+	return result;
+
+}
+
+//Transfer rgb to lab
+void rgb2lab( vec3* src, vec3* dest, int width, int height )
+{
+	for (int y = 0; y < height; y++)
+	{
+		for (int x = 0; x < width; x++)
+		{
+			vec3 c, tmp, xyz, n, v, lab;
+			c = src[ y * width + x];
+			tmp.r = ( c.r > 0.04045 ) ? pow( ( c.r + 0.055 ) / 1.055, 2.4 ) : c.r / 12.92;
+			tmp.g = ( c.g > 0.04045 ) ? pow( ( c.g + 0.055 ) / 1.055, 2.4 ) : c.g / 12.92,
+			tmp.b = ( c.b > 0.04045 ) ? pow( ( c.b + 0.055 ) / 1.055, 2.4 ) : c.b / 12.92;
+
+			xyz.r = 100.0 * ( tmp.r * 0.4124 + tmp.g * 0.3576 + tmp.b * 0.1805 ) ;
+			xyz.g = 100.0 * ( tmp.r * 0.2126 + tmp.g * 0.7152 + tmp.b * 0.0722 ) ;
+			xyz.b = 100.0 * ( tmp.r * 0.0193 + tmp.g * 0.1192 + tmp.b * 0.9505 ) ;
+
+			n.r = xyz.r / 95.047;
+			n.g = xyz.g / 100;
+			n.b = xyz.b / 108.883;
+
+			v.r = ( n.r > 0.008856 ) ? pow( n.r, 1.0 / 3.0 ) : ( 7.787 * n.r ) + ( 16.0 / 116.0 );
+			v.g = ( n.g > 0.008856 ) ? pow( n.g, 1.0 / 3.0 ) : ( 7.787 * n.g ) + ( 16.0 / 116.0 );
+			v.b = ( n.b > 0.008856 ) ? pow( n.b, 1.0 / 3.0 ) : ( 7.787 * n.b ) + ( 16.0 / 116.0 );
+
+			lab.r = ( 116.0 * v.g ) - 16.0;
+			lab.g =  500.0 * ( v.r - v.g );
+			lab.b = 200.0 * ( v.g - v.b );
+
+			dest[ y * width + x ].r = lab.r / 100.0;
+			dest[ y * width + x ].g = 0.5 + 0.5 * ( lab.g / 127.0 );
+			dest[ y * width + x ].b = 0.5 + 0.5 * ( lab.b / 127.0 );	
+		}
+	}
+}
+
+//Transfer lab to rgb
+void lab2rgb( vec3* src, vec3* dest, int width, int height )
+{
+	for (int y = 0; y < height; y++)
+	{
+		for (int x = 0; x < width; x++)
+		{
+			vec3 c, tmp, xyz, r, v, lab;
+			c = clamp ( src[ y * width + x] );
+			lab.r = 100.0 * c.r;
+			lab.g = 2.0 * 127.0 * ( c.g - 0.5 );
+			lab.b = 2.0 * 127.0 * ( c.b - 0.5 );
+
+			tmp.g = ( lab.r + 16.0 ) / 116.0;
+			tmp.r = lab.g / 500.0 + tmp.g;
+			tmp.b = tmp.g - lab.b / 200.0;
+
+			xyz.r = 95.047 * (( tmp.r > 0.206897 ) ? tmp.r * tmp.r * tmp.r : ( tmp.r -16.0 / 116.0 ) / 7.787);
+			xyz.g = 100.000 * (( tmp.g > 0.206897 ) ? tmp.g * tmp.g * tmp.g : ( tmp.g -16.0 / 116.0 ) / 7.787);
+			xyz.b = 108.883 * (( tmp.b > 0.206897 ) ? tmp.b * tmp.b * tmp.b : ( tmp.b -16.0 / 116.0 ) / 7.787);
+
+			v.r = ( xyz.r * 3.2406 + xyz.g * -1.5372 + xyz.b * -0.4986 ) / 100.0;
+			v.g = ( xyz.r * -0.9689 + xyz.g * 1.8758 + xyz.b * 0.0415 ) / 100.0;
+			v.b = ( xyz.r * 0.0557 + xyz.g * -0.2040 + xyz.b * 1.0570 ) / 100.0;
+
+			r.r = ( v.r > 0.0031308 ) ? (( 1.055 * pow( v.r, (1.0 / 2.4 ))) - 0.055 ) : 12.92 * v.r;
+			r.g = ( v.g > 0.0031308 ) ? (( 1.055 * pow( v.g, (1.0 / 2.4 ))) - 0.055 ) : 12.92 * v.g;
+			r.b = ( v.b > 0.0031308 ) ? (( 1.055 * pow( v.b, (1.0 / 2.4 ))) - 0.055 ) : 12.92 * v.b;
+
+			dest[ y * width + x ] = clamp( r );
+			
+		}
+	}
+}
+
+//Create a isotropical square Gaussian filter kernel
+
+void create_gauss_kernel(double* &kernel, double sigma, int &halfWidth )
+{
+	double twoSigma2 = 2.0 * sigma * sigma;
+	halfWidth = int ( ceil( 2.0 * sigma ) );
+
+    kernel = new double[ ( halfWidth * 2 + 1 ) * ( halfWidth * 2 + 1) ];
+	double norm = 0.0;
+	for ( int i = -halfWidth; i <= halfWidth; i++ )
+	{
+		for ( int j = -halfWidth; j <= halfWidth; j++)
+		{
+			norm += kernel[ ( i + halfWidth ) * ( halfWidth * 2 + 1 ) + j + halfWidth ] = exp( - ( i * i + j * j ) / twoSigma2 );
+		}
+	}
+	for ( int i = -halfWidth; i <= halfWidth; i++ )
+	{
+		for ( int j = -halfWidth; j <= halfWidth; j++)
+		{
+			kernel[ ( i + halfWidth ) * ( halfWidth * 2 + 1 ) + j + halfWidth ] /= norm ;
+		}
+	}
+}
+
+//Gaussian filter
+void gauss_filter( vec3* src, double sigma, vec3* dest, int width, int height )
+{
+	int halfWidth;
+	double* kernel = NULL;
+
+	//Create a gauss kernel
+	create_gauss_kernel( kernel, sigma, halfWidth );
+
+	for( int y = 0; y < height; y++ )
+	{
+		for ( int x = 0; x < width; x++ )
+		{
+			vec3 result = { 0.0, 0.0, 0.0 };
+			double norm = 0.0;
+			for ( int i = -halfWidth; i<= halfWidth; ++i )
+			{
+				for ( int j = -halfWidth; j<= halfWidth; ++j )
+				{
+					if ( ( y + i ) > 0 && ( x + j ) > 0 && ( y + i ) < height && ( x + j ) < width )// judge whether out of map
+					{
+						result.r += src[ ( y + i ) * width + x + j ].r * kernel[ ( i + halfWidth ) * ( halfWidth * 2 + 1 ) + j + halfWidth ];
+						result.g += src[ ( y + i ) * width + x + j ].g * kernel[ ( i + halfWidth ) * ( halfWidth * 2 + 1 ) + j + halfWidth ];
+						result.b += src[ ( y + i ) * width + x + j ].b * kernel[ ( i + halfWidth ) * ( halfWidth * 2 + 1 ) + j + halfWidth ];
+						norm += kernel[ ( i + halfWidth ) * ( halfWidth * 2 + 1 ) + j + halfWidth ];
+					}
+
+				}
+			}
+
+			dest[ y * width + x ].r = result.r / norm;
+			dest[ y * width + x ].g = result.g / norm;
+			dest[ y * width + x ].b = result.b / norm;
+
+		}
+	}
+
+	//Release kernel
+	delete[] kernel;
+	kernel = NULL;
+}
+
+void structure_tensor(vec3* src, vec3* st, int width, int height )
+{
+
+	for ( int y = 0; y < height; y++)
+	{
+		for ( int x = 0; x < width; x++ )
+		{
+			vec3 u, v;
+			int ym1 = ( y - 1 ) < 0 ? 0 : ( y - 1 );
+			int xm1 = ( x - 1 ) < 0 ? 0 : ( x - 1 );
+			int yp1 = ( y + 1 ) > ( height - 1 ) ? ( height - 1 ) : ( y + 1 );
+			int xp1 = ( x + 1 ) > ( width  - 1 ) ? ( width  - 1 ) : ( x + 1 );
+
+			//x gradient
+			u.r = ( 
+				-1.0 * src[ ym1 * width + xm1 ].r + 
+				-2.0 * src[ y   * width + xm1 ].r +
+				-1.0 * src[ yp1 * width + xm1 ].r +
+				+1.0 * src[ ym1 * width + xp1 ].r + 
+				+2.0 * src[ y   * width + xp1 ].r +
+				+1.0 * src[ yp1 * width + xp1 ].r ) / 4.0;
+
+			u.g = ( 
+				-1.0 * src[ ym1 * width + xm1 ].g + 
+				-2.0 * src[ y   * width + xm1 ].g +
+				-1.0 * src[ yp1 * width + xm1 ].g +
+				+1.0 * src[ ym1 * width + xp1 ].g + 
+				+2.0 * src[ y   * width + xp1 ].g +
+				+1.0 * src[ yp1 * width + xp1 ].g ) / 4.0;
+
+			u.b = ( 
+				-1.0 * src[ ym1 * width + xm1 ].b + 
+				-2.0 * src[ y   * width + xm1 ].b +
+				-1.0 * src[ yp1 * width + xm1 ].b +
+				+1.0 * src[ ym1 * width + xp1 ].b + 
+				+2.0 * src[ y   * width + xp1 ].b +
+				+1.0 * src[ yp1 * width + xp1 ].b ) / 4.0;
+
+			//y gradient
+			v.r = ( 
+				-1.0 * src[ ym1 * width + xm1 ].r + 
+				-2.0 * src[ ym1 * width + x ].r +
+				-1.0 * src[ ym1 * width + xp1 ].r +
+				+1.0 * src[ yp1 * width + xm1 ].r + 
+				+2.0 * src[ yp1 * width + x ].r +
+				+1.0 * src[ yp1 * width + xp1 ].r ) / 4.0;
+
+			v.g = ( 
+				-1.0 * src[ ym1 * width + xm1 ].g + 
+				-2.0 * src[ ym1 * width + x ].g +
+				-1.0 * src[ ym1 * width + xp1 ].g +
+				+1.0 * src[ yp1 * width + xm1 ].g + 
+				+2.0 * src[ yp1 * width + x ].g +
+				+1.0 * src[ yp1 * width + xp1 ].g ) / 4.0;
+
+			v.b = ( 
+				-1.0 * src[ ym1 * width + xm1 ].b + 
+				-2.0 * src[ ym1 * width + x ].b +
+				-1.0 * src[ ym1 * width + xp1 ].b +
+				+1.0 * src[ yp1 * width + xm1 ].b + 
+				+2.0 * src[ yp1 * width + x ].b +
+				+1.0 * src[ yp1 * width + xp1 ].b ) / 4.0;
+
+			//structure tensor
+			st[ y * width + x ].r = u.r * u.r + u.g * u.g + u.b * u.b;
+			st[ y * width + x ].g = v.r * v.r + v.g * v.g + v.b * v.b;
+			st[ y * width + x ].b = u.r * v.r + u.g * v.g + u.b * v.b;
+		}
+	}
+
+
+}
+
+//Generate tangent direction map
+void tangent_flow_map( vec3* src, double sigma, vec3* tfm, int width, int height )
+{
+	vec3* st = new vec3[ width * height ];//structure tensor
+	structure_tensor( src, st, width, height );
+
+	vec3* sst = new vec3[ width * height ]; // smoothed structure tensor
+	gauss_filter( st, sigma, sst, width, height );
+
+	//tangent direction map
+	for ( int y = 0; y < height ; y++ )
+	{
+		for ( int x = 0; x < width ; x++ )
+		{
+			vec3 g = sst[ y * width + x ];
+			double lambda1 = 0.5 * ( g.g + g.r + sqrt( g.g * g.g - 2.0 * g.r * g.g + g.r * g.r + 4.0 * g.b * g.b ) );
+			vec3 v = { g.r - lambda1, g.b, 0.0 };
+
+			if ( length( v ) > 0.0 )
+			{
+				tfm[ y * width + x ] = normalize( v );
+				tfm[ y * width + x ].b = sqrt( lambda1 );//may be used for weight???????????????????????????????????????????
+			}
+			else//ensure no zero vector
+			{
+				tfm[ y * width + x ].r = 0.0;
+				tfm[ y * width + x ].g = 1.0;
+				tfm[ y * width + x ].b = 0.0;
+			}
+		}
+	}
+
+	delete[] st;
+	st = NULL;
+	delete[] sst;
+	sst = NULL;
+
+}
+
+void orientation_aligned_bilateral_filter( vec3*src, vec3* tfm, vec3*dest, int n, double sigma_d, double sigma_r, int width, int height )
+{
+	double twoSigmaD2 = 2.0 * sigma_d * sigma_d;
+	double twoSigmaR2 = 2.0 * sigma_r * sigma_r;
+
+	vec3* tmp = new vec3[ width * height ];
+
+	for( int i = 0; i < n; i++ )
+	{
+		for ( int pass = 0; pass < 2; pass++ )
+		{
+			for ( int y = 0; y < height; y++ )
+			{
+				for ( int x = 0; x < width; x++ )
+				{
+					vec2 t = { tfm[ y * width + x ].r, tfm[ y * width + x ].g };
+					vec2 tt = { t.y, -t.x };
+					vec2 dir = ( pass == 0 ) ? tt : t;
+					vec2 dabs = abs( dir );
+					double ds = 1.0 / ( ( dabs.x > dabs.y ) ? dabs.x : dabs.y );
+
+					vec3* midsrc = ( i == 0 ? ( pass == 0 ? src : tmp ) : ( pass == 0 ? dest : tmp )  );
+					vec3 center = midsrc[ y * width + x ];
+					vec3 sum = center;
+					double norm = 1.0;
+					double halfWidth = 2.0 * sigma_d;
+
+					for ( double d = ds; d <= halfWidth; d += ds )
+					{
+						vec2 p0 = { x + d * dir.x, y + d * dir.y };
+						vec3 c0 = bilinear_interpolate( midsrc, p0, width, height );
+						vec2 p1 = { x - d * dir.x, y - d * dir.y };
+						vec3 c1 = bilinear_interpolate( midsrc, p1, width, height );
+
+
+						vec3 d0 = { c0.r -center.r, c0.g - center.g, c0.b - center.b };
+						vec3 d1 = { c1.r -center.r, c1.g - center.g, c1.b - center.b };
+						double e0 = length( d0 );
+						double e1 = length( d1 );
+
+						double kerneld = exp( -d * d / twoSigmaD2 );
+						double kernele0 = exp( - e0 * e0 / twoSigmaR2 );
+						double kernele1 = exp( - e1 * e1 / twoSigmaR2 );	
+						norm += kerneld * kernele0;
+						norm += kerneld * kernele1;
+
+						sum.r += kerneld * kernele0 * c0.r;
+						sum.r += kerneld * kernele1 * c1.r;
+						sum.g += kerneld * kernele0 * c0.g;
+						sum.g += kerneld * kernele1 * c1.g;
+						sum.b += kerneld * kernele0 * c0.b;
+						sum.b += kerneld * kernele1 * c1.b;
+					}
+
+					sum.r /= norm;
+					sum.g /= norm;
+					sum.b /= norm;
+
+					( pass == 0 ? tmp : dest )[ y * width + x ] = sum ;
+
+				}
+			}
+		}
+	}
+}
+
+void overlay( vec3* edges, vec3* image, vec3* dest, int width, int height )
+{
+
+}
+
+void fdog_filter( vec3* src, vec3* tfm, int n, double sigma_e, double sigma_r, double tau, double sigma_m, double phi, vec3* dest, int width, int height )
+{
+
+}
+
+void dog_filter( vec3* src,  int n, double sigma_e, double sigma_r, double tau, double phi, vec3* dest, int width, int height)
+{
+
+}
+
+void color_quantization( vec3* img, int nbins, double phi_q, int filter, vec3* dest, int wdith, int height )
+{
+	for ( int y = 0; y < height; y++ )
+	{
+		for ( int x = 0; x < wdith; x++ )
+		{
+			vec3 c = img[ y * wdith + x ];
+			double qn = floor( c.r * double( nbins ) + 0.5 ) / double( nbins );
+			//double qs = smoothstep( -2.0, 2.0, phi_q * ( c.r - qn ) * 100.0 ) - 0.5;
+            double qs = 0.;
+			double qc = qn + qs / double( nbins );
+
+			dest[ y * wdith + x ].r = qc ;
+			dest[ y * wdith + x ].g = qc;
+			dest[ y * wdith + x ].b = qc;
+		}
+	}
+}
+
+
+void make_noises( double* noise ,int width, int height )
+{
+	srand(1);
+	double *p = noise;
+	for (int j = 0; j < height; ++j) {
+		for (int i = 0; i < width; ++i) {
+			*p++ = 0.5f + 2.0f * ((double)rand() / RAND_MAX - 0.5); 
+		}
+	}
+	p = noise;
+	for (int j = 0; j < height; ++j) {
+		*p = (3*p[0] + p[1]) / 4;
+		++p;
+		for (int i = 1; i < width-1; ++i) {
+			*p = (p[-1] + 2*p[0] + p[1]) / 4;
+			++p;
+		}
+		*p = (p[-1] + 3*p[0]) / 4;
+		++p;
+	}
+	p = noise;
+	for (int i = 0; i < width; ++i) {
+		*p = (3*p[0] + p[width]) / 4;
+		++p;
+	}
+	for (int j = 1; j < height-1; ++j) {
+		for (int i = 0; i < width; ++i) {
+			*p = (p[-width] + 2*p[0] + p[width]) / 4;
+			++p;
+		}
+	}
+	for (int i = 0; i < width; ++i) {
+		*p = (p[-width] + 3*p[0]) / 4;
+		++p;
+	}
+}
+
+
+
+struct lic_t { 
+	vec2 p; 
+	vec2 t;
+	double w;
+	double dw;
+};
+
+inline void step( lic_t &s, vec3*tfm, int width, int height)
+{
+	vec3 tw = bilinear_interpolate( tfm, s.p, width, height, INTERPOLATE_NORM );
+	vec2 t = { tw.r, tw.g };
+	if ( dot( t, s.t ) < 0.0 )
+	{
+		t.x = -t.x;
+		t.y = -t.y;
+	}
+	s.t = t;
+
+	s.dw = ( abs( t.x ) > abs( t.y ) ) ? abs( 0.5 / t.x ) : abs( 0.5 / t.y ); //transversely or vertically move 0.5 pixel unit
+	s.p.x += t.x * s.dw;
+	s.p.y += t.y * s.dw;
+
+	s.w += s.dw;
+}
+
+void lic_filter( vec3* tfm, vec3* img, double sigma, vec3* dest, int width, int height )
+{
+	double twoSigma2 = 2.0 * sigma * sigma ;
+	double halfWidth = 2.0 * sigma;
+
+	for ( int y =0; y < height; y++)
+	{
+		for ( int x = 0; x < width; x++)
+		{
+			vec3 c = img[ y * width + x ];
+			double w = 1.0;
+			lic_t a, b;
+			vec2 p = { x, y };
+			vec2 t = { tfm[ y * width + x ].r, tfm[ y * width + x ].g };
+			a.p = b.p = p;
+			a.t = t;
+			b.t.x = - t.x;
+			b.t.y = - t.y;
+			a.w = b.w = 0.0;
+
+            fprintf(stdout, "while\n");
+
+			while ( a.w < halfWidth )
+			{
+				step( a, tfm, width, height );
+				//if ( a.p.x < 0 || a.p.x > ( width - 1 ) || a.p.y < 0 || a.p.y > ( height - 1 ) )//completely can be left out 
+				//{
+				//	break;
+				//}
+				double k = a.dw * exp( -a.w * a.w / twoSigma2);
+				vec3 sample = bilinear_interpolate( img, a.p, width, height );
+				c.r += k * sample.r;
+				c.g += k * sample.g;
+				c.b += k * sample.b;
+				w += k;
+			}
+            fprintf(stdout, "while2\n");
+			while ( b.w < halfWidth) {
+				step( b, tfm, width, height );
+				//if ( b.p.x < 0 || b.p.x > ( width - 1 ) || b.p.y < 0 || b.p.y > ( height - 1 ) )//completely can be left out 
+				//{
+				//	break;
+				//}
+				double k = b.dw * exp(-b.w * b.w / twoSigma2); // unknown b.dw???????????????????????????????????????????????????????????
+				vec3 sample = bilinear_interpolate( img, b.p, width, height );
+				c.r += k * sample.r;
+				c.g += k * sample.g;
+				c.b += k * sample.b;
+				w += k;
+			}
+			c.r /= w;
+			c.g /= w;
+			c.b /= w;
+
+			dest[ y * width + x ] = c;
+		}
+	}
+}
+
+void mix_filter( vec3* edges, vec3* img, float edge_color[3], vec3* dest, int width, int height )
+{
+
+}
+
+void smooth_filter( vec3* tfm, vec3* img, int type, double sigma, vec3* dest, int width, int height )
+{
+
+}
